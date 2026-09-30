@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -50,6 +52,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -74,6 +78,8 @@ jobs:
     env:
       WASI_SDK_VERSION: "33.0"
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -142,6 +148,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -171,6 +179,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -193,6 +203,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -210,6 +222,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -229,6 +243,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -244,6 +260,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -281,6 +299,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v8
         with:
@@ -384,6 +404,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -400,6 +422,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -417,6 +441,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -427,6 +453,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -446,6 +474,8 @@ jobs:
     timeout-minutes: 30
     continue-on-error: true
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -482,6 +512,8 @@ jobs:
     env:
       BUNDLE_PATH: vendor/bundle
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -533,6 +565,8 @@ jobs:
     env:
       BUNDLE_PATH: vendor/bundle
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -574,6 +608,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -661,6 +697,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -683,6 +721,8 @@ jobs:
     timeout-minutes: 30
     continue-on-error: true
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -747,6 +787,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -767,6 +809,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -800,6 +844,8 @@ jobs:
       matrix:
         target: [rust, crystal, kotlin, swift, csharp, typescript, go, elixir, python]
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -879,6 +925,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -908,6 +956,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -937,6 +987,8 @@ jobs:
     timeout-minutes: 30
     continue-on-error: true
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -981,6 +1033,8 @@ jobs:
       matrix:
         target: [rust, crystal, kotlin, swift, csharp, typescript, go, elixir, python, ruby, jruby]
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v8
         with:
@@ -1069,6 +1123,8 @@ jobs:
     timeout-minutes: 20
     continue-on-error: true
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v8
         with:
@@ -1101,6 +1157,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -1174,6 +1232,8 @@ jobs:
     timeout-minutes: 30
     continue-on-error: true
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v8
         with:
@@ -1207,6 +1267,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Install packages the Buildkite hosted image lacks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
