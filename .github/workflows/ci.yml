@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -182,11 +180,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-        with:
-          repository: matz/spinel
-          ref: master
-          path: spinel-src
+      - name: Clone matz/spinel master
+        run: git clone --depth 1 --branch master https://github.com/matz/spinel.git spinel-src
       - name: make deps (fetch vendored libprism)
         run: make -C spinel-src deps
       - name: make all
@@ -1180,9 +1175,9 @@ jobs:
       - name: Run campfire's suite against the emit
         run: |
           scripts/campfire-suite \
-            --tally /tmp/campfire-tally.txt \
+            --tally campfire-tally.txt \
             --fail-log /tmp/campfire-failures.txt \
-            --json /tmp/campfire-suite/summary.json \
+            --json campfire-suite/summary.json \
             /tmp/campfire
       # The harness reports a number and never gates on one (by design —
       # see its header), so the floor lives here. `>=`, so progress is
@@ -1377,10 +1372,10 @@ jobs:
           FLOOR_FILES: 66
         run: |
           set -euo pipefail
-          tests=$(awk -F'|' '{p += $3} END {print p+0}' /tmp/campfire-tally.txt)
-          total=$(awk -F'|' '{t += $4} END {print t+0}' /tmp/campfire-tally.txt)
-          files=$(grep -c '^PASS' /tmp/campfire-tally.txt || true)
-          echo "campfire conformance: $tests of $total tests, $files of $(grep -c . /tmp/campfire-tally.txt) files green"
+          tests=$(awk -F'|' '{p += $3} END {print p+0}' campfire-tally.txt)
+          total=$(awk -F'|' '{t += $4} END {print t+0}' campfire-tally.txt)
+          files=$(grep -c '^PASS' campfire-tally.txt || true)
+          echo "campfire conformance: $tests of $total tests, $files of $(grep -c . campfire-tally.txt) files green"
           echo "floor: $FLOOR_TESTS tests / $FLOOR_FILES files"
           rc=0
           if [ "$tests" -lt "$FLOOR_TESTS" ]; then
@@ -1403,7 +1398,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: campfire-conformance-tally
-          path: /tmp/campfire-tally.txt
+          path: campfire-tally.txt
           if-no-files-found: warn
       # The site job's input. `always()` for the same reason the tally is
       # uploaded that way, and it matters more here: a run that trips the
@@ -1417,7 +1412,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: campfire-conformance-summary
-          path: /tmp/campfire-suite/summary.json
+          path: campfire-suite/summary.json
           if-no-files-found: warn
 
   toolchain-elixir:
@@ -2744,26 +2739,3 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: _site
-
-  deploy:
-    needs:
-      - build-site
-      - unit
-    if: github.ref == 'refs/heads/main'
-    # Only one Pages deployment at a time. Scoped to this job, not the
-    # workflow: at the workflow level the same group serialised every
-    # run — a pull request queued behind a push to main and the next
-    # push behind that PR, at 20-40 minutes a run — for a lock only the
-    # deployment needs.
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
