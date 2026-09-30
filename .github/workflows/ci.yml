@@ -21,7 +21,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -53,7 +56,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -79,7 +85,10 @@ jobs:
       WASI_SDK_VERSION: "33.0"
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -149,7 +158,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -180,7 +192,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -204,7 +219,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -223,7 +241,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -244,7 +265,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -261,7 +285,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -300,7 +327,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v8
         with:
@@ -405,7 +435,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -423,7 +456,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -442,7 +478,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -454,7 +493,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -475,7 +517,10 @@ jobs:
     continue-on-error: true
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -513,7 +558,10 @@ jobs:
       BUNDLE_PATH: vendor/bundle
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -566,7 +614,10 @@ jobs:
       BUNDLE_PATH: vendor/bundle
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -609,7 +660,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -698,7 +752,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -722,7 +779,10 @@ jobs:
     continue-on-error: true
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -788,7 +848,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -810,7 +873,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -845,7 +911,10 @@ jobs:
         target: [rust, crystal, kotlin, swift, csharp, typescript, go, elixir, python]
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -926,7 +995,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -957,7 +1029,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -988,7 +1063,10 @@ jobs:
     continue-on-error: true
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -1034,7 +1112,10 @@ jobs:
         target: [rust, crystal, kotlin, swift, csharp, typescript, go, elixir, python, ruby, jruby]
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v8
         with:
@@ -1124,7 +1205,10 @@ jobs:
     continue-on-error: true
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v8
         with:
@@ -1158,7 +1242,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -1233,7 +1320,10 @@ jobs:
     continue-on-error: true
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v8
         with:
@@ -1268,7 +1358,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install packages the Buildkite hosted image lacks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libclang-dev libyaml-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang libclang-dev libyaml-dev libsqlite3-dev sqlite3 libssl-dev pkg-config file
+          sudo install -d -o "$(id -un)" /usr/share/dotnet
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
