@@ -11,23 +11,11 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  # The Rails apps the /ide/ + /playground/ demos ship (in-browser). Pinned
-  # so the page — and any blog post's claims about it — stay stable against
-  # upstream churn; bump deliberately. Each bundle embeds the app's LICENSE
-  # and its commit (bundle-src.mjs). Lobsters is the ruby-bench benchmark
-  # copy (MIT); campfire is Basecamp's ONCE Campfire (MIT) — the write+push
-  # app (Action Cable, turbo_stream broadcasts) and the current climb;
-  # Mastodon (AGPL) is the scale case.
   MASTODON_SHA: 163f96cee4dea23365bff9b433871e68d20d9ee7
   RUBY_BENCH_SHA: d771f81f1ce9db51376e03ca7b8e6a83160556d4
   CAMPFIRE_SHA: 90b330024dec3e757c79b6a7e6568f93da8e3148
 
 jobs:
-  # -------------------------------------------------------------------
-  # Generate the real-blog fixture once, upload as artifact. Every
-  # downstream test job downloads + extracts it — pay the Ruby/Rails
-  # install cost once per CI run instead of in each of seven jobs.
-  # -------------------------------------------------------------------
   generate-fixture:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -41,9 +29,6 @@ jobs:
         run: gem install rails
       - name: Generate fixtures/real-blog
         run: bin/rh fixture
-      # The Rails Guides store rides the same artifact: the /ide/
-      # default app and a picker entry, so build-site and
-      # browser-smoke-ide bundle it without a second Rails install.
       - name: Generate fixtures/store by following the guide
         run: cd fixtures && ../scripts/create-store store
       - name: Pack fixtures
@@ -61,19 +46,6 @@ jobs:
           path: real-blog.tar.gz
           retention-days: 1
 
-  # -------------------------------------------------------------------
-  # The Rails Guides "Getting Started" store: built by following the
-  # guide (scripts/create-store, which also runs the guide's own tests),
-  # then analyzed. The claim this job keeps: the analyzer reports ZERO
-  # errors, ZERO warnings and ZERO ingest gaps on the official tutorial
-  # app, with no annotations — the store's nine errors (token APIs,
-  # Action Text's form builder, parameterized mailers), thirty-eight
-  # warnings (the authentication generator's shapes, Action Text's
-  # copied `_blob` partial) and four gaps (`.text.erb` / `.json.erb`
-  # templates) were all analyzer gaps, closed 2026-09-16. A new Rails
-  # release can change the generated code this analyzes; when that
-  # goes red it is the analyzer's next entry, not noise.
-  # -------------------------------------------------------------------
   store-check:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -96,23 +68,8 @@ jobs:
           target/release/roundhouse check --continue fixtures/store 2>&1 | tee /tmp/store-check.txt
           grep -E "^roundhouse-check: .* 0 error\(s\), 0 warning\(s\), 0 gap-attributed note\(s\), 0 survey gap\(s\)" /tmp/store-check.txt
 
-  # -------------------------------------------------------------------
-  # Build the in-browser compiler wasm (roundhouse_wasm.wasm) from source
-  # and upload it as an artifact for build-site. Runs in PARALLEL with
-  # generate-fixture — they're independent (the wasm embeds the compiler;
-  # the fixture is runtime input fed in the browser), so this multi-minute
-  # LTO build hides behind work build-site already waits on, adding ~0 to
-  # the critical path to deploy. Rebuilds via the in-repo vendored
-  # ruby-rbs-sys (wasm/vendor/ — wasm32 build support upstream-pending as
-  # ruby/rbs#2992), so the 3.8 MB binary is NOT committed and the published
-  # demos (/playground/, /studio/) always track main. The only external
-  # need is the WASI SDK (a manual tarball, cached here).
-  # -------------------------------------------------------------------
   build-wasm:
     runs-on: ubuntu-latest
-    # The job normally finishes in a few minutes; a hung apt install
-    # once rode the old 45-minute ceiling and stalled the whole
-    # build-site → smoke → deploy tail behind it (2026-08-19).
     timeout-minutes: 20
     env:
       WASI_SDK_VERSION: "33.0"
@@ -144,8 +101,6 @@ jobs:
       - name: Build roundhouse_wasm.wasm
         env:
           WASI_SDK_PATH: /opt/wasi-sdk
-          # Stamped into the wasm's `version` export, which /ide/ puts on
-          # its copyable summary line.
           ROUNDHOUSE_COMMIT: ${{ github.sha }}
         run: cargo build --release --target wasm32-wasip1 --manifest-path wasm/Cargo.toml
       - name: Upload wasm artifact
@@ -155,27 +110,7 @@ jobs:
           path: wasm/target/wasm32-wasip1/release/roundhouse_wasm.wasm
           retention-days: 1
 
-  # -------------------------------------------------------------------
-  # Build the spinel AOT compiler from matz/spinel@master and publish
-  # the toolchain as an artifact. Downstream toolchain-spinel /
-  # compare-spinel jobs download + chmod +x and either prepend to PATH
-  # or pass SPINEL=.../spinel to the scaffold Makefile (runtime/spinel/
-  # scaffold/Makefile honors SPINEL ?= spinel).
-  #
-  # The single `spinel` binary resolves its `spinel_rbs_extract` sidecar
-  # and `lib/` relative to its own directory, so the tree ships as a unit.
-  # Tracking master rather than pinning a SHA — bump to a pin if upstream
-  # churn turns flaky.
-  # -------------------------------------------------------------------
   build-spinel:
-    # Re-enabled 2026-06-17 (framework-tests-spinel 5/5 + compare-spinel 7/7
-    # green again on matz/spinel master). Tracks matz/spinel master UNPINNED,
-    # so it can go red independently of any roundhouse change; continue-on-error
-    # keeps that advisory rather than failing the whole run (the downstream
-    # framework-tests / compare-spinel jobs are likewise advisory). If a build
-    # failure here cascades to skipped/failed downstream jobs, that's fine — the
-    # signal is still visible without blocking unrelated work. (toolchain-spinel
-    # stays gated below pending matz/spinel#1447.)
     continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -187,38 +122,6 @@ jobs:
       - name: make all
         run: make -C spinel-src all
       - name: Stage artifact tree
-        # `make all` now builds a single `spinel` binary (a top-level symlink
-        # to bin/spinel) plus the `spinel_rbs_extract` sidecar under build/;
-        # the legacy spinel_parse/spinel_analyze/spinel_codegen split moved
-        # under legacy/ and is no longer produced. (The build also emits
-        # bin/spinel-{doctor,reduce,flatten}, which roundhouse doesn't ship.)
-        # The single binary locates both `spinel_rbs_extract` and `lib/`
-        # relative to the directory it is invoked from, so they must ship
-        # alongside it. The extractor is REQUIRED for the --rbs path
-        # (toolchain-spinel / compare-spinel); without it, --rbs is silently
-        # a no-op and the seeded path goes untested. `cp -L` dereferences the
-        # symlink to copy the real binary.
-        # `spin` (spinel's project tool, a native binary spinel compiles
-        # from tools/spin.rb) ships too: the spinel archive is a spin
-        # package and smoke-spinel's README blocks drive `spin build` /
-        # `spin test`. spin locates the compiler as its PATH sibling.
-        # `packages/` ships as well: the compiler resolves bundled spin
-        # packages (json, set, …) at `<lib-parent>/packages` — a plain
-        # `require "json"` in runtime code (runtime/spinel/json.rb since
-        # 72029f0a) silently resolves NOTHING without it, and every
-        # spinel job goes red on `undefined method 'generate'`.
-        # `builtins/` is the same lesson a third time: since spinel
-        # 50e2d7bf the core Enumerable methods (`partition`, `group_by`,
-        # `each_with_object`, …) are Ruby in `builtins/enumerable.rb`,
-        # spliced by the compiler from `<lib-parent>/builtins`, and their
-        # C emitters are gone. A toolchain staged without the directory
-        # compiles SILENTLY with no such methods: campfire's two
-        # `relation.partition { }` sites became an unconditional
-        # `undefined method 'partition' for an instance of Array` whose
-        # carrier failed the C build (`sp_int` into `sp_PolyArray *`),
-        # while the same emit built clean from any full checkout — a day
-        # spent on a spinel regression that was this `cp`. Upstream's own
-        # `make install` ships it; this list must mirror that target.
         run: |
           mkdir spinel-dist
           cp -L spinel-src/spinel               spinel-dist/spinel
@@ -234,10 +137,6 @@ jobs:
           path: spinel-dist
           retention-days: 1
 
-  # -------------------------------------------------------------------
-  # Library correctness. Runs the default (non-ignored) test suite:
-  # ingest / analyze / IR round-trip / per-target emit snapshot tests.
-  # -------------------------------------------------------------------
   unit:
     needs: generate-fixture
     runs-on: ubuntu-latest
@@ -251,42 +150,15 @@ jobs:
           name: real-blog-fixture
       - name: Extract fixture
         run: tar -xzf real-blog.tar.gz
-      # `tests/overlay_sanitize_autolink.rs` shells out to ruby and
-      # loads the CRuby overlay's escape surface, which serves
-      # `sanitize` / `strip_tags` from the real gem. Without the gem the
-      # overlay falls back to the shared scanner (which refuses markup
-      # by design) and the test fails naming this step. It is the only
-      # coverage those helpers have: campfire's suite passes with the
-      # gem hidden, and the oracle comparison does not run in CI.
-      #
-      # setup-ruby, not the runner's system ruby, for two reasons. The
-      # first is that `gem install` against the system ruby is a
-      # `Gem::FilePermissionError` — this step shipped without it and
-      # took the job red on its first run. The second is the one that
-      # matters after today: the test asserts EXACT sanitizer output, so
-      # the ruby it runs on is part of the assertion. 3.4 is the version
-      # campfire-conformance pins, so both lanes exercise these helpers
-      # on the same one.
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
       - name: Install the gem the overlay escape surface uses
         run: gem install rails-html-sanitizer --no-document
-      # `tests/emit_and_run.rs` and `tests/relation_runtime_cruby.rs`
-      # run the emitted Ruby tree, whose database layer is the sqlite3
-      # gem. The second skipped without it and passed: before this step
-      # the unit job ran it as a no-op. The first refuses to skip.
       - name: Install the gem the emitted Ruby tree runs on
         run: gem install sqlite3 --no-document
       - name: cargo test
         run: cargo test --all-targets
-      # scripts/bench emits nine of its lanes with `cargo run --bin
-      # emit_preview` — the DEBUG profile — and nothing else in CI did:
-      # the site job and bin/rh run `--release`, whose frames are a
-      # fraction of the size. A debug-only stack overflow (bf2e160f's
-      # 45-term `||` chain) therefore passed CI green and took nine lanes
-      # off the published bench page. This is the harness's own shape,
-      # run here so the next one fails a PR instead of a nightly.
       - name: Emit every bench lane in the debug profile (scripts/bench's shape)
         run: |
           set -euo pipefail
@@ -294,20 +166,6 @@ jobs:
             cargo run --quiet --bin emit_preview -- --target "$target" fixtures/real-blog >/dev/null
           done
 
-  # -------------------------------------------------------------------
-  # One job per target language. Each generates a project from the
-  # fixtures in-process and runs the target's real toolchain over it.
-  #
-  # SHRUNK by the smoke consolidation (see the smoke-<target> matrix):
-  # the smoke jobs run each archive's full build + model/controller
-  # test + Playwright legs from the published tgz, so toolchain jobs
-  # whose only coverage was real-blog build/test (go, rust, kotlin,
-  # swift) are retired — their harnesses remain as dev-loop tools
-  # (cargo test --test <t>_toolchain -- --ignored). The survivors stay
-  # for coverage smoke can't reach: tiny-blog gates (crystal, elixir,
-  # python — the absent-feature shape real-blog can't test) and
-  # typescript's dual-profile tsc + node:test (async coloring).
-  # -------------------------------------------------------------------
   toolchain-crystal:
     needs: generate-fixture
     runs-on: ubuntu-latest
@@ -332,13 +190,6 @@ jobs:
 
   framework-tests-swift:
     needs: generate-fixture
-    # Per-target framework-test conformance gate for the Swift target:
-    # transpiles runtime/ruby/test/**/*_test.rb to XCTest classes and runs
-    # them under `swift test`. Complements smoke-swift (the archive's
-    # real-blog suite): this one runs the framework runtime's own
-    # assertions, catching adapter drift the app tests miss. Sibling of
-    # framework-tests-kotlin. NOTE: needs a full toolchain with XCTest —
-    # Linux toolchains bundle it; macOS would need Xcode (not just CLT).
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -351,21 +202,9 @@ jobs:
       - name: Install libsqlite3-dev (CSQLite systemLibrary)
         run: |
           "$GITHUB_WORKSPACE/scripts/ci-apt-install" libsqlite3-dev
-      # Unfiltered: all five wired suites (inflector, router,
-      # view_helpers, errors, ac_base) run. The last two joined when the
-      # class-reflection `< StandardError` emit and the inline
-      # `TestController < ActionController::Base` typing landed — the
-      # same pass that un-filtered framework-tests-kotlin.
       - name: cargo test --test framework_tests_swift
         run: cargo test --test framework_tests_swift -- --ignored --nocapture
 
-  # toolchain-typescript: tsc parity + node:test on real-blog,
-  # under both the default (`node-sync`, better-sqlite3) profile
-  # AND the `node-async` libsql profile that exercises async
-  # coloring. The filter `real_blog` excludes the still-
-  # aspirational tiny_blog gate (broken on main, pre-existing) and
-  # the diagnostic `dump_transpiled_blog_tsc_errors` non-asserting
-  # helper. Drop the filter once tiny_blog reaches parity.
   toolchain-typescript:
     needs: generate-fixture
     runs-on: ubuntu-latest
@@ -387,17 +226,6 @@ jobs:
         run: cargo test --test typescript_toolchain real_blog -- --ignored --nocapture
 
   framework-tests-typescript:
-    # Per-target framework-test conformance gate. Transpiles
-    # runtime/ruby/test/**/*_test.rb to TS and runs under tsx.
-    # Independent of the real-blog fixture (each test builds a
-    # minimal in-process App), so this parallelizes freely
-    # against generate-fixture / toolchain-* jobs. Catches
-    # per-target adapter contract drift (e.g., is_exists vs
-    # exists rename, regex anchor translation) before it
-    # cascades into real-blog runtime failures. Sibling of the
-    # disabled toolchain-typescript above; runs on the same
-    # Node setup but a much smaller and faster scope (~12s vs
-    # minutes). See project_framework_test_transpile.md.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -411,23 +239,6 @@ jobs:
       - name: cargo test --test framework_tests_typescript -- --ignored
         run: cargo test --test framework_tests_typescript -- --ignored --nocapture
 
-  # Browser smoke for the TypeScript *SharedWorker* deployment profile
-  # (juntos) — distinct from the tsx-server smoke-typescript job below.
-  # Harness + README live in tests/browser_smoke/. The pipeline (driven
-  # by `npm test` → scripts/prebuild.mjs → playwright.config.ts):
-  #   1. emit real-blog under `--profile worker` (cargo run emit_preview),
-  #   2. npm install + vite-build the emitted SPA into .emitted/dist,
-  #   3. `npm run preview` serves it; Playwright drives headless Chromium.
-  # The spec opens its OWN SharedWorker port and dispatches synthetic
-  # GET/POST/DELETE/422 requests + a multi-tab BroadcastChannel probe,
-  # asserting no 5xx. This is the only job that exercises the emitted
-  # framework runtime *inside a SharedWorker*, so it catches portability
-  # gaps the server target can't see: Node-only globals (Buffer/process/
-  # require) in transpiled output, missing browser polyfills, broken
-  # MessagePort / BroadcastChannel wiring, installDb ordering. Builds
-  # from source (needs generate-fixture, like toolchain-typescript),
-  # NOT from the published archive. Playwright config gates on $CI
-  # (GitHub sets it) → fresh server + forbidOnly + github reporter.
   browser-smoke-typescript:
     needs: generate-fixture
     runs-on: ubuntu-latest
@@ -465,14 +276,6 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # The /ide/ demo, driven in a real chromium: analyze the pinned
-  # Mastodon bundle in the wasm worker, then assert the demo beats —
-  # typed hover (@account → Account, incl. inside a HAML template),
-  # typed completion (@status. → account: Account?), related files via
-  # the inferred render graph, and the coverage ledger being on. This
-  # regression-guards the published demo (and the blog post's claims):
-  # a change that mutes any beat fails CI before it reaches Pages.
-  # Deterministic inputs (pinned SHA + fresh wasm), so blocking.
   browser-smoke-ide:
     needs: [build-wasm, generate-fixture]
     runs-on: ubuntu-latest
@@ -507,8 +310,6 @@ jobs:
           node wasm/ide/bundle-src.mjs /tmp/mastodon wasm/ide/app-src.json \
             --name mastodon --commit "${MASTODON_SHA}" \
             --open app/controllers/statuses_controller.rb
-      # The other two picker apps, so verify-ide.mjs can exercise the app
-      # switch (blog + lobsters + mastodon). Mirrors the build-site assembly.
       - name: Cache lobsters source bundle
         id: lobsters-src
         uses: actions/cache@v4
@@ -580,17 +381,6 @@ jobs:
           (cd wasm/studio && node verify-studio.mjs)
 
   framework-tests-crystal:
-    # Per-target framework-test conformance gate for the Crystal
-    # target. Transpiles runtime/ruby/test/**/*_test.rb through
-    # crystal::emit and runs the result under `crystal spec`.
-    # Independent of the real-blog fixture (each test builds a
-    # minimal in-process App with a single TestModule), so this
-    # parallelizes freely against generate-fixture / toolchain-*
-    # jobs. Catches per-target adapter contract drift and Crystal
-    # strict-typing regressions (NamedTuple/Hash bridging,
-    # nullable narrowing, etc.) before they cascade into real-blog
-    # runtime failures. Sibling of framework-tests-typescript /
-    # framework-tests-ruby.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -607,15 +397,6 @@ jobs:
         run: cargo test --test framework_tests_crystal -- --ignored --nocapture
 
   framework-tests-kotlin:
-    # Per-target framework-test conformance gate for the Kotlin target.
-    # Transpiles runtime/ruby/test/**/*_test.rb through kotlin::emit and
-    # runs the emitted JUnit-5 spec under `gradle test`. Independent of the
-    # real-blog fixture (each test builds a minimal in-process App with a
-    # single TestModule), so this parallelizes freely against
-    # generate-fixture / toolchain-* jobs. Complements smoke-kotlin (the
-    # archive's real-blog suite): this one runs the framework runtime's
-    # own assertions, catching adapter drift the app tests miss. Sibling
-    # of framework-tests-typescript / framework-tests-crystal.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -629,32 +410,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.1'
-      # Unfiltered: all five wired suites (inflector, router,
-      # view_helpers, errors, ac_base) run. The last two joined when the
-      # class-reflection `< StandardError` emit and the inline
-      # `TestController < ActionController::Base` typing landed — the
-      # same pass that un-filtered framework-tests-swift.
       - name: cargo test --test framework_tests_kotlin
         run: cargo test --test framework_tests_kotlin -- --ignored --nocapture
 
   framework-tests-rust:
-    # Per-target framework-test conformance gate for the Rust target.
-    # Transpiles runtime/ruby/test/**/*_test.rb through rust2::emit and
-    # runs the emitted crate under `cargo test`. Independent of the
-    # real-blog fixture (each test builds a minimal in-process App), so
-    # it parallelizes freely against generate-fixture / toolchain-*.
-    #
-    # Why it exists: rust2 collapsed `is_a?(TrueClass)` and
-    # `is_a?(FalseClass)` to one predicate, so every `false` serialized
-    # as `true`. That was found via the TYPESCRIPT gate (db434d83) —
-    # rust had none, and real-blog has no boolean column, so nothing on
-    # the rust side would ever have caught it.
-    #
-    # Scoped to the green subset (inflector). The other five suites are
-    # wired in the test file and fail on named rust2 gaps — see the
-    # comment block there. Same filter convention as
-    # framework-tests-kotlin / -swift; drop names as the gaps close.
-    # Tracked in #34.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -665,15 +424,6 @@ jobs:
         run: cargo test --test framework_tests_rust -- --ignored --nocapture inflector
 
   framework-tests-ruby:
-    # Per-target framework-test conformance gate for the Ruby target
-    # (CRuby/MRI). Transpiles runtime/ruby/test/**/*_test.rb through
-    # ruby::emit_spinel (named for historical reasons; emits the
-    # Ruby-shape output that runs under stock CRuby). Catches
-    # per-target lowering regressions (test-class-shape rewrites,
-    # fixture refs, parent-class swap) that the source-side
-    # `framework_ruby_tests_pass` gate can't see because it runs the
-    # Ruby verbatim. Sibling of framework-tests-typescript above and
-    # framework-tests-spinel below.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -687,58 +437,10 @@ jobs:
           working-directory: ./runtime/spinel/scaffold
       - name: cargo test --test framework_tests_ruby -- --ignored
         run: cargo test --test framework_tests_ruby -- --ignored --nocapture
-      # A uuid-keyed app (fixtures/tiny-blog-uuid) emitted to Ruby and
-      # driven on CRuby: minted + supplied keys, find/exists?/update/
-      # destroy by a string key, belongs_to/has_many across a uuid
-      # foreign key (#90). Same runtime, same gems, so it rides here.
       - name: cargo test --test uuid_key_ruby -- --ignored
         run: cargo test --test uuid_key_ruby -- --ignored --nocapture
 
-  # Per-target framework-test conformance gate for the spinel AOT
-  # target. Same emit pipeline as framework-tests-ruby, but each
-  # emitted test is compiled to a native binary via `spinel --rbs sig
-  # <file>.rb -o <bin>` and executed; the autorun shim returns
-  # non-zero on any assertion failure.
-  #
-  # Status (2026-06-02, spinel a782696): all 5 expected green locally.
-  # matz/spinel #915 (the old `return NULL` blocker named in earlier
-  # revisions of this comment) has landed, so errors/ac_base/router/
-  # inflector pass. The `view_helpers` stand-in previously hit two
-  # spinel mis-compiles of the inline `Article < ActiveRecord::Base`;
-  # both are now worked around roundhouse-side:
-  #   (a) the `Article` ctor's `id` param was widened to sp_RbVal because
-  #       the inherited `ActiveRecord::Base.create(attrs={})` factory
-  #       calls `new(attrs)` with a Hash — spinel unifies that poly call
-  #       site with `Article.new(7)` (Integer) into one C param type. The
-  #       body `self.id = id` then inlined the inherited attr_accessor
-  #       setter as a direct write to the narrow `mrb_int` id field, so
-  #       `mrb_int = sp_RbVal` failed to compile. Filed as matz/spinel#1275
-  #       with a 19-line standalone repro (no RBS; the optional default
-  #       and the `?Integer` RBS are both red herrings — a required param
-  #       reproduces identically). WORKED AROUND: the stand-in now assigns
-  #       `@id = id` (direct ivar write) instead of `self.id = id`; the
-  #       direct-write path widens the field to match, so all four targets
-  #       (ruby/crystal/ts/spinel) agree. Real generated models are
-  #       unaffected — they use the Hash-`attrs` ctor shape, which doesn't
-  #       trigger the unification. The spinel-side fix still tracked in #1275.
-  #   (b) the `[]` field-lookup returns Integer|String across branches
-  #       and spinel commits to one C type instead of boxing — filed as
-  #       matz/spinel#1255 (clean minimal repro). ADDRESSED roundhouse-
-  #       side: inner test stand-ins now emit an `.rbs` sidecar
-  #       (`sig/test/<stem>_inner.rbs`) with `def []: ... -> (Integer |
-  #       String)`, the annotation the issue's own repro confirms makes
-  #       spinel box. So (b) no longer needs the spinel fix and no longer
-  #       appears in the log.
-  # #1275 and #1255 have since closed upstream (2026-07 audit); (a)'s
-  # direct ivar write is idiomatic-ctor Ruby and (b)'s sidecar is typed
-  # surface we want anyway, so neither is reverted. continue-on-error
-  # stays ON for the same structural reason as toolchain-spinel below:
-  # every spinel job tracks matz/spinel master UNPINNED, so it surfaces
-  # regressions without letting upstream churn gate unrelated work.
-  # `ar_base` is disabled in-test (b453fcf) pending real-sqlite
-  # rewiring of the test_helper.
   framework-tests-spinel:
-    # Re-enabled 2026-06-17 (5/5 green on matz/spinel master). Advisory.
     needs: build-spinel
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -757,73 +459,19 @@ jobs:
           echo "$PWD/spinel-dist" >> $GITHUB_PATH
       - name: cargo test --test framework_tests_spinel -- --ignored
         run: cargo test --test framework_tests_spinel -- --ignored --nocapture
-      # The web-push gem's crypto ported onto spinel's openssl package
-      # (runtime/spinel/web_push_crypto.rb), pinned against the gem's
-      # own bytes. Same staged spinel; the package links the runner's
-      # system libssl.
       - name: cargo test --test spinel_web_push_crypto -- --ignored
         if: always()
         run: cargo test --test spinel_web_push_crypto -- --ignored --nocapture
-      # A request that raises gives its connection back
-      # (runtime/spinel/db.rb `with_connection`); a leaked lease used to
-      # wedge a pool shard for good after four 500s.
       - name: cargo test --test spinel_db_lease -- --ignored
         if: always()
         run: cargo test --test spinel_db_lease -- --ignored --nocapture
-      # Rails' request-params builder, ported for the spinel dispatcher
-      # (runtime/spinel/param_builder.rb), held to Rails' answers for
-      # 2,755 query strings. The CRuby half runs in the core job.
       - name: cargo test --test spinel_param_builder -- --ignored
         if: always()
         run: cargo test --test spinel_param_builder -- --ignored --nocapture
-      # Rails' signed-value vectors on the spinel-compiled verifier (the
-      # CRuby half runs in the core job), plus secrets whose derived keys
-      # hold a zero byte — the binary used to cut those keys short.
       - name: cargo test --test rails_compat_vectors_spinel -- --ignored
         if: always()
         run: cargo test --test rails_compat_vectors_spinel -- --ignored --nocapture
 
-  # Campfire conformance — ONCE Campfire's OWN test suite, run against a
-  # roundhouse emit of it. The C4 rung of the coverage ladder, and the
-  # first time that number is produced by anything but a human at a
-  # terminal: it was hand-run per session before this, so it could drift
-  # between them with nothing to say so.
-  #
-  # IN CI, NOT ON THE BENCH BOX — the opposite call from lobsters
-  # conformance, and for one reason: the INPUT IS PINNED. `CAMPFIRE_SHA`
-  # fixes the app, so every movement in the number belongs to a commit
-  # here, which is the only thing CI can attribute. `scripts/lobsters-specs`
-  # deliberately does NOT pin ("a ledger answers a present-tense question…
-  # record the input, don't freeze it"), so per-commit attribution is
-  # impossible there and the cron box is its home. Nor is this job
-  # timing-sensitive the way the benchmarks are, so a shared runner is
-  # fine. Bumping CAMPFIRE_SHA moves the number deliberately, and the
-  # commit that bumps it owns the delta.
-  #
-  # BLOCKING, NOT ADVISORY. `framework-tests-spinel` above is
-  # `continue-on-error` because it tracks matz/spinel master unpinned and
-  # upstream churn must not gate unrelated work — but the cost is that a
-  # break there is invisible in the run's conclusion (learned the hard
-  # way: a rename broke all 8 and CI still reported success). Nothing here
-  # is unpinned, so there is no churn to excuse noise and no reason to
-  # reach for that hatch.
-  #
-  # Cheap, unlike its lobsters sibling: `campfire-suite` runs the EMIT's
-  # own tests, so it needs no Rails bundle and no mise-pinned ruby — just
-  # cargo, ruby, the sqlite3 gem, and the sqlite3 CLI.
-  # campfire-compare: REAL Rails campfire vs the CRuby-emit lane — the
-  # only job that boots Rails campfire. Both lanes start from the same
-  # seeded rows and take the same cable walk (sign in through the real
-  # form, two sockets, a plain and an HTML-bodied message); what each
-  # lane's wire carried is then diffed: the room page (reported) and
-  # the TURBO-STREAM FRAMES over /cable (gated) — the piece no page
-  # compare can carry. Known divergences are forgiven BY NAME against
-  # docs/pipeline/runtime.md; anything new fails.
-  #
-  # This is the REQUIRED lane (CRuby emit). The binary legs below —
-  # campfire-compare-spinel (default) and (minor-gc) — take the same
-  # walk against the compiled binary and stay advisory, because spinel
-  # is tracked unpinned.
   campfire-compare:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -832,8 +480,6 @@ jobs:
         image: redis
         ports: ['6379:6379']
     env:
-      # The oracle's `bundle install` lands inside build/campfire-oracle
-      # so the prepared-tree cache carries the gems with it.
       BUNDLE_PATH: vendor/bundle
     steps:
       - uses: actions/checkout@v5
@@ -846,11 +492,6 @@ jobs:
         run: |
           curl -fsSL "https://codeload.github.com/basecamp/once-campfire/tar.gz/${CAMPFIRE_SHA}" -o /tmp/campfire.tar.gz
           mkdir -p /tmp/campfire && tar -xzf /tmp/campfire.tar.gz -C /tmp/campfire --strip-components=1
-      # campfire's own config/initializers/vips.rb runs
-      # `Vips.block_untrusted(true)` at every Rails boot, and ruby-vips
-      # only defines that method against libvips >= 8.13 — the runner
-      # image's copy is older, so `bin/rails db:prepare` died on the
-      # app's own hardening line.
       - name: System libvips
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libvips-dev sqlite3
       - name: Cache the prepared oracle
@@ -863,89 +504,12 @@ jobs:
         if: steps.oracle.outputs.cache-hit != 'true'
         run: scripts/campfire-oracle prepare --app /tmp/campfire
       - name: Emit-lane + walk gems
-        # Onto the DEFAULT gem path, campfire-conformance's reasoning:
-        # the emit boots via bare `ruby -S puma` and the drive script
-        # via bare `ruby`, so a bundler-scoped install would not be seen.
-        #
-        # bcrypt is campfire-conformance's lesson relearned on this
-        # job's first full run: the runtime's bcrypt_facade has no
-        # `require "bcrypt"`, a dev box that has the gem hides the
-        # dependency completely — and without it the emit lane cannot
-        # verify the seeded password digests, so sign-in 302s and the
-        # walk dies at its first probe. (The spinel lane compiles its
-        # own bcrypt and never noticed.)
-        #
-        # ruby-vips, the same lesson once more: the app declares image
-        # variants, so the emit's runtime/active_storage_processor.rb
-        # is the ruby-vips reopen and `require "vips"` runs at boot —
-        # without the gem the emit never comes up. The System libvips
-        # step above is the library it binds.
-        #
-        # concurrent-ruby, the lesson a third time: campfire's
-        # `WebPush::Pool` (lib/) builds its thread pools from it, the
-        # CRuby tree swaps the runtime's port for a bare
-        # `require "concurrent"`, and app/models.rb requires the pool —
-        # so it is a LOAD-time reach, and without it the emit never
-        # comes up either. This job took the run red on the commit that
-        # added the require (a73d7ccd) exactly as the two above did.
-        #
-        # web-push (with net-http-persistent beside it), a fourth time:
-        # boot ends with campfire's `WebPush::Request.prepend
-        # WebPush::PersistentRequest`, a load-time reach into the gem's
-        # class, since the initializer's guard is now carried rather
-        # than dropped. bed66113 took this job red on it.
         run: gem install puma nio4r websocket-driver rack sqlite3 bcrypt ruby-vips concurrent-ruby net-http-persistent web-push rails-html-sanitizer --no-document
       - name: scripts/campfire-compare
         run: scripts/campfire-compare /tmp/campfire
-      # What the MODELS write: once-campfire-rust's model scenario run by
-      # Rails and by the emit from the same fixtures, every table diffed,
-      # then Rails booted on the emit's database (the rollback). Green on
-      # both lanes since it landed; see runtime.md "Campfire's models
-      # write what Rails writes".
       - name: scripts/campfire-db-differential
         run: scripts/campfire-db-differential /tmp/campfire
 
-  # campfire-compare-spinel: the same equivalence, with the compiled
-  # BINARY as the emit lane — Rails' broadcast frames vs the binary's.
-  # A real gate since matz/spinel#4240 (SanitizeTags inert through an
-  # untyped slot) was fixed the day it was filed; its first green run
-  # is the strongest claim this repo makes about the demo artifact.
-  # `continue-on-error` for the same reason framework-tests-spinel is:
-  # spinel is tracked unpinned, and upstream churn must not gate
-  # unrelated work — with the known cost that a break here is invisible
-  # in the run conclusion, so check these legs BY NAME when campfire
-  # moves.
-  #
-  # Three legs, one definition. `default` serves the binary with spinel's
-  # whole-heap mark; `minor-gc` serves it under SPINEL_GC_MINOR=1, the
-  # generational collector that is opt-in until it goes default-on.
-  # matz asked for this leg by name (matz/spinel#4260): the default-on
-  # decision needs a workload with a large, stable retained heap, and a
-  # long-lived process holding connection registries and a rendered
-  # room page is that shape — lobsters is request-shaped, LangArena the
-  # opposite. Both legs consume the SAME build-spinel artifact of the
-  # SAME run, so a red `minor-gc` beside a green `default` is the
-  # collector alone. That is the report he wants most: reduce it, file
-  # it upstream, and say minor-GC-only in the title. Only the served
-  # binary sees the variable — scripts/campfire-compare exports it
-  # explicitly, 0 or 1, on the launch line and nowhere else.
-  #
-  # `verify-gen` is the third leg, and it is why the other two can be
-  # believed. SPINEL_GC_MINOR alone only fails when a missed write
-  # barrier reaches the PAGE; SPINEL_GC_VERIFY_GEN=1 re-marks the whole
-  # heap after every minor cycle and makes the runtime name the young
-  # object the barrier did not record and the scan hook of the old
-  # object holding it — the reduction, written by the collector. It is
-  # NOT a replacement for `minor-gc`: the check keeps alive what the
-  # minor missed, so it reports the defect instead of crashing on it,
-  # and it is not the mode anything ships in. matz/spinel#4311 is the
-  # shape this produces (a `minor-GC-only` title, fixed the same day).
-  #
-  # All three legs also carry the collector's own attestation now: the
-  # emit is stopped before the diff and Tep.on_shutdown prints GC.stat,
-  # and a `minor-gc` leg reporting remembered_peak=0 FAILS — a walk that
-  # never took a minor cycle with a live remembered set is green about
-  # nothing.
   campfire-compare-spinel:
     name: campfire-compare-spinel (${{ matrix.gc }})
     needs: build-spinel
@@ -984,10 +548,6 @@ jobs:
           chmod +x spinel-dist/spinel spinel-dist/spin spinel-dist/spinel_rbs_extract
           echo "$PWD/spinel-dist" >> $GITHUB_PATH
       - name: System libvips + libsqlite3-dev + libjemalloc-dev
-        # libjemalloc-dev because the emitted spin.toml names jemalloc as
-        # this program's allocator and `spin build` links `-ljemalloc`.
-        # The DEV package, not libjemalloc2: the runtime library LD_PRELOAD
-        # uses cannot be linked against.
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libvips-dev libsqlite3-dev libjemalloc-dev sqlite3
       - name: Fetch pinned once-campfire
         run: |
@@ -1020,108 +580,9 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
-      # Two gems, from two different places, both needed by a bare
-      # `ruby -Itest` — which is how the suite runs each file, so they
-      # have to land on the DEFAULT gem path; a bundler-cached
-      # vendor/bundle would not be seen.
-      #
-      #   sqlite3 — the emitted `runtime/db.rb` is the gem-backed shim
-      #             (`require "sqlite3"`).
-      #   bcrypt  — from the APP, not from us: campfire's own
-      #             `test/fixtures/users.yml` opens with
-      #             `<% BCrypt::Password.create("secret123456") %>`, and
-      #             the emitted fixture carries that through. Our
-      #             `runtime/ruby/bcrypt_facade.rb` has no `require
-      #             "bcrypt"` — reading that as "the gem is not needed"
-      #             is what shipped this job red on its first run, with
-      #             `uninitialized constant UsersFixtures::BCrypt` in 49
-      #             of 52 files. A dev box that has bcrypt installed for
-      #             any other reason hides it completely.
-      #   mocha   — same story as webmock: the app declares it in
-      #             `group :test` and stubs `Resolv.getaddress` /
-      #             `SecureRandom` / `Webhook.any_instance` with it.
-      #             `apply_test_gem_wiring` writes `require "mocha/api"`
-      #             (not mocha/minitest — the emitted helper is
-      #             Minitest-free) plus the lifecycle calls.
-      #   webmock — also from the app, and the one WE now write the
-      #             require for: campfire's own test_helper opens with
-      #             `require "webmock/minitest"`, our emitted helper is a
-      #             shim that dropped it, and `apply_test_gem_wiring`
-      #             re-adds it. Adding that require without adding the
-      #             gem here is what took this job red — the same
-      #             ambient-dependency trap as bcrypt below, walked into
-      #             from the other direction: the gem was on the laptop,
-      #             so the emit looked fine.
-      #   nokogiri — also from the app: `app/models/opengraph/document.rb`
-      #             calls `Nokogiri::HTML(html)` and campfire carries it
-      #             transitively (rails-html-sanitizer). The emitted tree
-      #             does not DECLARE it in its Gemfile, which is its own
-      #             gap; installing it here is parity with what the emit
-      #             actually loads.
-      #   rqrcode — also from the app: `QrCodeController#show` renders a
-      #             QR as SVG. Gem façades are spinel-only (spinel AOT
-      #             cannot link native gems and ships a raising stub);
-      #             on the CRuby tree `runtime/gem_facades.rb` is swapped
-      #             for guarded requires of the REAL gems, and rqrcode
-      #             joins that list.
-      #   sentry-ruby — also from the app: campfire's message helpers
-      #             rescue through `Sentry.capture_exception`, and the
-      #             emitted Gemfile DECLARES it now
-      #             (`project.rs::RUNTIME_GEMS`), so the stub that used
-      #             to stand for it left `campfire-walk-stubs.rb`. Not
-      #             adding the gem here took this job red at 197/240 in
-      #             SEVEN files, all `uninitialized constant
-      #             MessagesHelper::Sentry` — the third time this exact
-      #             trap has been walked into, and the second from this
-      #             direction: the gem was on the laptop because the
-      #             emitted tree had just been bundled there, so the
-      #             local suite read 219/240 and the emit looked fine.
-      #             A local run proves nothing about this list unless
-      #             the gem is HIDDEN: put a file that raises LoadError
-      #             first on the load path
-      #             (`RUBYOPT=-I/tmp/nosentry scripts/campfire-suite`)
-      #             and the CI numbers reproduce exactly.
-      #   platform_agent — also from the app, and the ONE with a LOAD-time
-      #             reach: `app/models/application_platform.rb` opens
-      #             `class ApplicationPlatform < PlatformAgent`, so its
-      #             absence is not an undefined constant on one route —
-      #             `app/models.rb` stops requiring and EVERY file fails.
-      #             This job read 0 of 240 when the emitted Gemfile grew
-      #             the declaration (`project.rs::RUNTIME_GEMS`) and this
-      #             list did not: the fourth walk into the trap the
-      #             sentry-ruby note below describes, and the loudest,
-      #             because a load-time gem takes the whole suite rather
-      #             than the files that name it. Its own dependency
-      #             `useragent` arrives with it.
-      #   ruby-vips — also from the app, and the only one with a NATIVE
-      #             library behind it: campfire's logo and avatar tests
-      #             decode the response body and assert its PIXEL
-      #             dimensions, which is the only honest way to check
-      #             that an image endpoint served an image of the right
-      #             size. ruby-vips is an FFI binding, so the gem alone
-      #             installs fine and then fails at LOAD time without
-      #             libvips on the box — which is why the apt step below
-      #             is not optional.
-      #   ffmpeg — the video previewer (`runtime/spinel/active_storage_
-      #             previewer.rb`): campfire's own Dockerfile installs it,
-      #             and `Message::AttachmentTest` posts a .mov and asserts
-      #             the poster frame got attached.
       - name: Install libvips (ruby-vips binds it through FFI) and ffmpeg
         run: |
           "$GITHUB_WORKSPACE/scripts/ci-apt-install" libvips-dev ffmpeg
-      #   concurrent-ruby, net-http-persistent, web-push — also from the
-      #             app, all three behind `WebPush::Pool`: the thread
-      #             pools it posts deliveries to, the keep-alive client
-      #             it hands them, and the gem that sends. The CRuby
-      #             tree swaps the runtime's `Concurrent` port for a
-      #             bare `require "concurrent"`, so that one is a
-      #             LOAD-time reach like platform_agent (lib/web_push/
-      #             pool.rb requires it, and app/models.rb requires
-      #             that); the other two are guarded-required and fail
-      #             as an undefined constant in `room_push_test` alone.
-      #             concurrent-ruby already arrives as sentry-ruby's
-      #             dependency; named here so removing sentry-ruby
-      #             cannot silently take the pool with it.
       - name: Install the gems the emitted suite loads
         run: gem install sqlite3 bcrypt nokogiri webmock mocha rqrcode ruby-vips sentry-ruby platform_agent concurrent-ruby net-http-persistent web-push rails-html-sanitizer --no-document
       - name: Fetch once-campfire at the pinned SHA
@@ -1130,24 +591,6 @@ jobs:
           curl -fsSL "https://codeload.github.com/basecamp/once-campfire/tar.gz/${CAMPFIRE_SHA}" -o /tmp/campfire.tar.gz
           mkdir -p /tmp/campfire
           tar -xzf /tmp/campfire.tar.gz -C /tmp/campfire --strip-components=1
-      # The OTHER campfire number, and the one #71's Phase 0 gates on:
-      # the STRICT emit — no `--allow-unsupported`, so an unsupported
-      # construct is an ERROR and the run writes nothing at all. It
-      # reached 0 on 2026-08-26 (3357442f), 10 -> 0 in six commits, so
-      # it is a CEILING that ratchets down the way the suite's floor
-      # ratchets up.
-      #
-      # Deliberately a STRICT target, and deliberately not the lane the
-      # suite runs. `campfire-suite` emits `--target ruby
-      # --allow-unsupported`, where the same findings come out as
-      # `gradual_untyped` / `unresolved_type` warnings and the error
-      # count is 0 for a reason that means nothing — which is exactly
-      # the confusion the published summary page carries today
-      # (rubys/roundhouse#71). This step is the run the ledger's
-      # "zero errors" invariant is actually about.
-      #
-      # Same profile as the suite's own `cargo run`, so the build is
-      # shared rather than paid twice.
       - name: Enforce the strict-emit ceiling
         env:
           CEILING_ERRORS: 0
@@ -1167,11 +610,6 @@ jobs:
           if [ "$errors" -lt "$CEILING_ERRORS" ]; then
             echo "::notice::ceiling is stale — lower CEILING_ERRORS to $errors"
           fi
-      # --json is what the published page is rendered from; --fail-log is
-      # what makes its ranking honest. Without the fail log every unpassed
-      # test in a file is charged to that file's FIRST error, which reads
-      # as one wall blocking twelve tests when only three of them ever
-      # reach it (the trap dfa42be3 fixed for the terminal tally).
       - name: Run campfire's suite against the emit
         run: |
           scripts/campfire-suite \
@@ -1179,194 +617,7 @@ jobs:
             --fail-log /tmp/campfire-failures.txt \
             --json campfire-suite/summary.json \
             /tmp/campfire
-      # The harness reports a number and never gates on one (by design —
-      # see its header), so the floor lives here. `>=`, so progress is
-      # never a failure; exceeding it emits a notice asking for the bump,
-      # which is how the floor stays honest instead of decorative.
       - name: Enforce the floor
-      #
-      # MEASURED HERE, NOT ON A LAPTOP. The 72/8 this job first shipped
-      # with came from a dev box and was not reproducible: bcrypt and
-      # nokogiri were ambient there, and `Pathname()` — which
-      # `app/helpers/cable_helper.rb` calls without a `require
-      # "pathname"` — resolves bare on Ruby 4.0 but not on the 3.4 this
-      # job pins. (The BUNDLED table that writes that require lives in
-      # `spin_shape`, so the ruby target never gets it — fixed at the
-      # root in 49a12bf2, which gives the ruby family the table too.)
-      # With the gems installed above and that fix in, a clean runner
-      # independently reaches the same 72/8 the dev box did: the number
-      # was right, its REPRODUCIBILITY was not. The floor is whatever a
-      # runner reaches, and it goes UP by the notice below, never by
-      # assertion.
-      #
-      # 219/40 -> 220/41, raised on the notice this step emitted for
-      # `ede6c585`. The test that turned is
-      # `Sessions::TransfersControllerTest#test_show_renders_when_not_signed_in`,
-      # and its file with it: `fb835d02` gave `form_with` a runtime for
-      # the case the view walker's macro-inline cannot reach — one
-      # written inside an `app/helpers/` module, where there is no
-      # accumulator to splice into and the options are a runtime value.
-      # The spinel half of that same gap was an undefined SYMBOL at link
-      # time; this is the CRuby half.
-      #
-      # 220/41 -> 253/40 on the CAMPFIRE_SHA bump to `94a48aac`. The
-      # test count is up 33 and the DENOMINATOR is up 48 (240 -> 288):
-      # upstream added a JSON bot API (index/update/destroy for messages,
-      # create/destroy for boosts) and an SSRF guard over push
-      # endpoints, which is two new test files and one existing file
-      # grown from 7 tests to 23.
-      #
-      # The file count DIPPED to 40 on the bump and is back at 41: the
-      # file that had left was `messages/by_bots_controller_test`, and
-      # `messages/boosts/by_bots_controller_test` replaced it in the
-      # green set once `String#blank?` became whitespace-aware
-      # (`lower::blank`, which had deferred it). A boost posted with a
-      # body of three spaces was being accepted and stored where Rails
-      # answers 422 — the emit was WRONG there, not merely short a test.
-      #
-      # `by_bots_controller_test` itself is still 16 of 23: an
-      # `UploadedFile` reaching `blank?`, and a test helper whose return
-      # type is not inferred (so a local bound from it is not projected
-      # to its id at a route helper). Raising this floor further means
-      # closing those, not asserting the number.
-      #
-      # 255/41 -> 256/42, on the notice this step has now emitted FOUR
-      # TIMES. The file that turned is `messages_controller_test`, and it
-      # turned at `9d10511b` — "Rails deletes twelve URL options before
-      # generating a path; we forwarded all twelve". The three commits
-      # after it (`b2acbc64`, `ef6127cf`, `18e1601f`) each measured the
-      # same 256/42 and each asked again; the number moved once and the
-      # floor simply did not follow it.
-      #
-      # A stale floor is not harmless, which is the reason to bump it
-      # rather than let it ride: while it sat at 255, the test
-      # `9d10511b` had just won was free to break again without failing
-      # this step. A ratchet that lags is a ratchet with slack in it.
-      #
-      # 287/53 of 288/54 -> 291/51 of 300/55 on the CAMPFIRE_SHA bump to
-      # `977cbcd1` (2026-09-11: link-preview hardening, direct-upload
-      # auth, cable disconnect on sign-out, bot-key log redaction). No
-      # test that passed on `94a48aac` fails on the ruby lane; the nine
-      # short are all NEW tests, each a named cause in
-      # bench/campfire/suite-causes.json. The spinel lane is the one
-      # that regressed on the bump (287 -> 286/300): four tests in
-      # files upstream did not touch failed with `undefined method
-      # 'call' for an instance of Proc` — `proc-call-lost`, which was
-      # matz/spinel#4529 (one 4-param user `call` shadowing the poly
-      # `.call` fast path) and closed by #4530 the same day, 290/300
-      # on the merge. The rooms tests it added are the first to assert
-      # on attachment RENDERING, and they found that @mentions and link
-      # previews never reach their partials on either lane
-      # (`attachable-partials-not-rendered`).
-      #
-      # `ed0f9a5d` (2026-09-20) is one commit past `977cbcd1`: our own
-      # basecamp/once-campfire#279, merged by rosa, which mints the
-      # tampered sgid in action_text_attachment_test with `to_sgid(for:)`
-      # instead of extending one live Room. The suite is otherwise
-      # unchanged, and the last ledger line (`object-extend`) reads zero.
-      #
-      # `91d294f4` (2026-09-24) is one commit past `ed0f9a5d`:
-      # basecamp/once-campfire#280, merged by rosa, the same rewrite for
-      # the same idiom in test/lib/rails_ext/action_text_attachables_test.rb
-      # — the one test `object-extend` still counted on both lanes
-      # (394/395). With it no campfire test extends a single object, and
-      # the suite measured 396 of 396, 68 of 68 files, on both lanes
-      # (spinel 234125c5, the one skip is campfire's own `skip`).
-      #
-      # `f8e36e97` (2026-09-26) is three merges past `91d294f4`: rubyzip
-      # 3.4.0 (#282), an Actions bump (#281), and `REDIS_URL` (#262) —
-      # an ERB `ENV.fetch` in config/cable.yml and a new
-      # config/initializers/resque.rb, neither of which reaches the emit
-      # (cable.yml is not read; the initializer is not a mixin). The
-      # first of four steps across upstream's Lexxy merge (`9a258bd`),
-      # taken alone so each step's fallout is its own. Measured 396 of
-      # 396, 68 of 68 files, on both lanes (spinel 3bc554dc).
-      #
-      # `9a258bd1` (2026-09-26) is the Lexxy merge (#224): the editor
-      # replaces Trix. The second of four steps, alone. What it took: the
-      # gem's editor markup (one `<lexxy-editor>` holding the call's block,
-      # no hidden input); its sanitizer allow-list and campfire's own,
-      # read off their boot; its stylesheets and `lexxy.js` built from the
-      # gem; `render layout: false` and a bare `format.json` in the new
-      # autocompletion arms; a namespace split so `ContentFilters`' constant
-      # exists before `SanitizeTags` reads it; bare helper calls in an
-      # `ActionView::TestCase`; `Rails::HTML5::SafeListSanitizer` on spinel;
-      # and the newline Action Text's `_content` partial ends with. An
-      # allowed `style` is DROPPED on spinel (no CSS scrubber; ledgered).
-      # Measured 406 of 406, 69 of 69 files, on both lanes (spinel
-      # 3bc554dc), campfire-compare green on both, room page included.
-      #
-      # `8fa6138f` (2026-09-26) is two merges past `9a258bd1`: mocha 3.1.0
-      # (#257) and web-push 3.1.0 (#254), which lets openssl go to 4.0.2 —
-      # Gemfile.lock only. The emitted trees pin none of the three (the
-      # ruby lane already resolved current releases; spinel uses none),
-      # so what moved is the Rails oracle. The third of four steps.
-      # Measured 406 of 406, 69 of 69 files, on both lanes (spinel
-      # 3bc554dc), campfire-compare green on both.
-      #
-      # `90b33002` (2026-09-26) is upstream main: composer drafts (#283)
-      # and mention-menu spacing (#284) — the composer's JS and CSS, a
-      # `data-action` string, `bin/release`, a system test. The last of
-      # the four steps. Measured 406 of 406, 69 of 69 files, on both lanes
-      # (spinel 3bc554dc); campfire-compare green on both; the four
-      # browser specs green through the Lexxy composer.
-      #
-      # 300 of 300 -> 342 of 397 (2026-09-20), the SAME campfire: the
-      # ingest had only ever read `test/models` and `test/controllers`,
-      # and campfire's `test/lib`, `test/channels` and `test/helpers` —
-      # twelve files, ninety-seven tests — were in no tally at all. Now
-      # read, they land as thirteen files (one declares two test
-      # classes, which used to lose the second) and 42 pass at once,
-      # 21 of them the private-network guard's. The 55 short are each
-      # a named cause in bench/campfire/suite-causes.json, and the two
-      # largest are harness, not app: `ActionCable::Channel::TestCase`
-      # (20 tests, `cable-test-case` + `turbo-signed-stream-name`) and
-      # the libvips loader policy the test process never applies
-      # (`vips-policy-not-applied-in-tests`). The floor did not move:
-      # no file that was green went red, and a floor is raised on the
-      # notice below, never on a denominator.
-      #
-      # 256/42 -> 376/61, on the notice `414f3322` emitted (2026-09-22:
-      # the Channel/Connection test-case harness, 356 -> 376 with
-      # exactly the five test/channels files flipping and nothing else
-      # moving). The floor had sat at 256/42 through 300/300 and
-      # 356/397 — a ratchet with a hundred and twenty tests of slack in
-      # it, every one of them free to break again without failing this
-      # step. Set to what this runner measured, as the notice said.
-      #
-      # 376/61 -> 382/64, on the notice `4042b19b`'s run emitted (the
-      # helper test's `view`, the logger stack behind campfire's
-      # formatter, `squish` and the identity assertions). Three files
-      # turned and nothing else moved.
-      #
-      # NOT raised to the 391 measured locally in the same session: the
-      # vips loader-policy commit after this one turns nine more, and
-      # every one of them asks the LOCAL libvips which formats it
-      # compiled in. A Linux runner's build is not this laptop's, so
-      # that number is a prediction until a runner prints it — and the
-      # rule this ratchet is built on is that a floor goes up by the
-      # notice, never by prediction.
-      #
-      # 382/64 -> 390/65, on the notice `08e2e163`'s run emitted. That
-      # prediction is now settled and worth recording: this runner
-      # measured 390 of 395 where the laptop measured 391 of 396, and
-      # the ONLY difference is the skip count — two formats the Linux
-      # libvips did not compile in against one here. Files green agree
-      # at 65, which is what the `skip` commit was for.
-      #
-      # 390/65 -> 391/66, on the notice `6992754a`'s run emitted
-      # (`Current.set` and `ActionDispatch::TestRequest`, which turned
-      # the opengraph-embed file). Not raised to the 393 measured
-      # locally after it: that number includes `to_gid`, which lands in
-      # THIS commit and whose runner figure is not in yet — same rule
-      # as last time.
-      #
-      # 391/66 -> 392/66, on the notice `eb2a4d09`'s run emitted (the
-      # `to_gid` mint). Files green did not move: the test it turned
-      # shares a file with `object-extend`, which is outside the subset
-      # and will keep that file red for as long as a compiled target
-      # has no per-object method table — or until upstream takes
-      # basecamp/once-campfire#280, #279's twin for this file.
         env:
           FLOOR_TESTS: 392
           FLOOR_FILES: 66
@@ -1390,9 +641,6 @@ jobs:
             echo "::notice::floor is stale — raise FLOOR_TESTS/FLOOR_FILES to $tests/$files"
           fi
           exit $rc
-      # Always: a regression is exactly when the per-file first-error
-      # column is worth reading, and that is the run where the step above
-      # failed.
       - name: Upload the tally
         if: always()
         uses: actions/upload-artifact@v4
@@ -1400,13 +648,6 @@ jobs:
           name: campfire-conformance-tally
           path: campfire-tally.txt
           if-no-files-found: warn
-      # The site job's input. `always()` for the same reason the tally is
-      # uploaded that way, and it matters more here: a run that trips the
-      # floor is precisely the run whose published worklist someone needs
-      # to read. build-site consumes this without gating on this job's
-      # conclusion (see its `if:`), so a red floor still publishes the
-      # page that explains itself — the same "deliberately ungated on
-      # content" contract the lobsters conformance page keeps.
       - name: Upload the conformance summary
         if: always()
         uses: actions/upload-artifact@v7
@@ -1436,45 +677,7 @@ jobs:
       - name: cargo test --test elixir_toolchain -- --ignored
         run: cargo test --test elixir_toolchain -- --ignored --nocapture
 
-  # -------------------------------------------------------------------
-  # (toolchain-ruby retired by the smoke consolidation: smoke-ruby's
-  # README § Test runs the same five driver suites from the published
-  # archive. The harness remains a dev-loop tool:
-  # cargo test --test ruby_toolchain -- --ignored.)
-  # -------------------------------------------------------------------
-  # Spinel-AOT toolchain. Same emit pipeline as toolchain-ruby (lowered
-  # real-blog + target-specific tests), but the runner is the spinel
-  # AOT compiler from build-spinel. Each emitted test file compiles to
-  # a native binary via `$SPINEL <file>.rb -o <bin>`; each binary
-  # runs and asserts exit 0 (autorun shim emits explicit per-test
-  # dispatch — no minitest at_exit).
-  #
-  # Requires libsqlite3-dev at link time (the binaries `-lsqlite3`).
-  # ubuntu-latest ships libsqlite3-0 (runtime) but not the dev linker
-  # symlink, so we install it explicitly.
-  # Briefly went green after matz/spinel#631 closed (bffabac); then
-  # matz/spinel c66d00a landed the shape-A fix for #634 and surfaced
-  # a follow-on over-widening: @location ivar (nil-default + typed
-  # writers) now reads as sp_RbVal, breaking sp_StrStrHash_set's
-  # const char* slot in the Location-header path. Comment on #634
-  # (issuecomment-4503927146) tracks the consumer-side narrow.
-  # Drop continue-on-error when matz lands the body-driven post-pass.
-  # Re-enabled 2026-06-02 (was `if: false`). The real-blog app now
-  # compiles under spinel and passes 9/9 model tests after the from_stmt
-  # void*/mrb_int fix (5aae416). One spinel-specific runtime assertion
-  # remains in articles_controller_test (the same emitted source passes
-  # under CRuby in toolchain-ruby — an AOT runtime divergence, not an
-  # emit bug), so the job stays advisory via continue-on-error until that
-  # closes. Running it (vs `if: false`) keeps the model-suite progress
-  # visible and catches regressions in the compile path.
   toolchain-spinel:
-    # Un-gated 2026-06-18: matz/spinel#1447 (the `||=`-into-poly-setter →
-    # null-Flash segfault in the controller integration test) closed
-    # upstream, clearing the last blocker on the real-blog AOT suite (the
-    # void-tail compile error was already fixed in #1444). Stays advisory
-    # via continue-on-error — like every spinel job it tracks matz/spinel
-    # master UNPINNED, so it surfaces regressions without gating unrelated
-    # work; if master churns red, the signal is visible but non-blocking.
     needs: [generate-fixture, build-spinel]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1497,9 +700,6 @@ jobs:
           chmod +x spinel-dist/spinel spinel-dist/spin spinel-dist/spinel_rbs_extract
           echo "$PWD/spinel-dist" >> $GITHUB_PATH
       - name: Install libsqlite3-dev + libjemalloc-dev
-        # jemalloc for the same reason the emitted README now lists it:
-        # spin.toml names it as the allocator, so the link needs the dev
-        # package present.
         run: |
           "$GITHUB_WORKSPACE/scripts/ci-apt-install" libsqlite3-dev libjemalloc-dev
       - uses: ruby/setup-ruby@v1
@@ -1510,15 +710,6 @@ jobs:
       - name: cargo test --test spinel_toolchain -- --ignored
         run: cargo test --test spinel_toolchain -- --ignored --nocapture
 
-      # On failure, capture spinel's actual generated C for the failing
-      # controller test. The failure is at RUNTIME (the C compiles under
-      # spinel's `-Wno-all`), so spinel reaps its transient out.c — we
-      # regenerate it emit-only (`spinel -c`) from the leftover emit
-      # scratch, then surface the type mismatch with a plain gcc compile
-      # (no `-Wno-all`). This is the environment-independent repro for the
-      # spinel issue: the input `.rb`/`.rbs` plus the wrong C spinel emitted
-      # here (e.g. `dispatch_request(sp_SymPolyHash*)` fed an `sp_StrIntHash*`),
-      # which other environments don't reproduce.
       - name: Capture spinel codegen on failure
         if: failure()
         run: |
@@ -1552,12 +743,6 @@ jobs:
           retention-days: 7
 
   toolchain-python:
-    # Re-enabled 2026-06-06: the transpiled framework set is degrade-free,
-    # the emitted real-blog unittest is green (21/21), and `compare python`
-    # matches Rails 5/5. Python version tracks the local dev environment
-    # (system `python3`, which the `python_toolchain` test shells out to);
-    # `from __future__ import annotations` keeps the emit version-agnostic
-    # back to 3.11 (the emitted `requires-python`).
     needs: generate-fixture
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1593,32 +778,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      # Two legs: `dotnet build` of the emitted ASP.NET Core project (the C#
-      # analog of crystal's `--no-codegen` / go's `vet` — model layer,
-      # transpiled framework runtime and primitives compiling together), and
-      # `dotnet test tests`, which RUNS the transpiled real-blog suite (21) as
-      # an xUnit project with an executed-count floor. csharp was the last
-      # target whose gates asserted nothing about behavior (#34 §0).
-      # Serialize dotnet's FIRST-RUN configuration before the two legs
-      # race it. Both `real_blog_dotnet_build_passes` and
-      # `real_blog_csharp_tests_pass` shell out to `dotnet`, cargo runs
-      # them on separate threads, and on a cold runner each invocation
-      # tries `DotnetFirstTimeUseConfigurer` — which builds a
-      # `NuGet-Migrations` mutex under /tmp/.dotnet/shm and is NOT
-      # concurrency-safe. The loser dies before running a single test
-      # with `mkdir(…/shm/session…) == -1; errno == EEXIST`, which reads
-      # as a compile failure in the summary and is nothing of the kind.
-      # One warm invocation here does the setup once, serially; the
-      # env vars keep it from being attempted again.
-      #
-      # THE WARM-UP ALONE WAS NOT ENOUGH (5df2b63b tried it; 465201f0
-      # failed the same way, `MigrationRunner.Run` under
-      # `DotnetFirstTimeUseConfigurer.Configure`). Whatever the warm
-      # invocation settles, the two test threads still reach the
-      # configurer concurrently — so the cargo step below also runs
-      # `--test-threads=1`, which removes the race itself rather than
-      # trying to finish before it. Two dotnet legs at ~1 min each are
-      # not worth a flake that reads as a C# compile failure.
       - name: Warm the dotnet CLI (first-run config is not concurrency-safe)
         env:
           DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
@@ -1632,24 +791,6 @@ jobs:
           DOTNET_CLI_TELEMETRY_OPTOUT: '1'
         run: cargo test --test csharp_toolchain -- --ignored --nocapture --test-threads=1
 
-  # -------------------------------------------------------------------
-  # DOM equivalence: boot Rails + the target server side-by-side and
-  # diff response bodies via tools/compare. The toolchain jobs above
-  # only verify that the emitted code compiles and passes its native
-  # tests; these jobs verify it actually behaves the same as Rails on
-  # live HTTP. One job per target — same matrix as toolchain.
-  # -------------------------------------------------------------------
-  # compare: one job per compile-and-boot target, DOM-diffing the live
-  # transpiled server against Rails over HTTP. Matrixed from nine
-  # near-identical jobs; every per-target difference (toolchain install +
-  # versions) is a guarded step below. ruby/setup-ruby runs LAST on every
-  # target so its MRI 3.4 wins PATH when Rails boots — required by the JVM
-  # targets (setup-java/gradle otherwise leave system Ruby 3.2 resolving
-  # bin/rails; see the old compare-kotlin note) and harmless everywhere
-  # else. fail-fast off so one target's failure doesn't cancel the rest
-  # (matches the old independent jobs). ruby/jruby/spinel stay separate
-  # below: two setup-ruby steps / an extra build-spinel dependency don't
-  # fit this shape.
   compare:
     needs: generate-fixture
     runs-on: ubuntu-latest
@@ -1725,7 +866,6 @@ jobs:
       - name: Install uv (Python)
         if: matrix.target == 'python'
         uses: astral-sh/setup-uv@v7
-      # setup-ruby LAST — see the job comment (MRI 3.4 must win PATH).
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -1734,12 +874,6 @@ jobs:
       - name: scripts/compare ${{ matrix.target }}
         run: scripts/compare ${{ matrix.target }}
 
-  # compare-ruby: same shape as every other compare-* — Puma+Rack
-  # server bound to :3000 via ruby_overlay's config.ru, hit over
-  # HTTP. Two ruby setups: the fixture's Gemfile (Rails reference)
-  # and the scaffold's Gemfile (Puma + Rack target). Node is needed
-  # for tailwindcss asset compilation; no target compile step
-  # (Ruby is interpreted).
   compare-ruby:
     needs: generate-fixture
     runs-on: ubuntu-latest
@@ -1769,15 +903,6 @@ jobs:
       - name: scripts/compare ruby
         run: scripts/compare ruby
 
-  # compare-jruby: same emitted tree as compare-ruby but served by Puma
-  # on the JVM via JRuby with the JDBC db backend (runtime/db.rb =
-  # db_jruby.rb). The Rails reference runs under CRuby 3.4 (the default
-  # `ruby`); the target is launched with an explicit `jruby`, so the two
-  # setup-ruby steps are ordered jruby-first / CRuby-last to leave 3.4 as
-  # the default. JRuby must be >= 10 — the runtime uses Fiber[:k] storage
-  # (Ruby 3.2+), which JRuby 9.4 (Ruby 3.1) lacks. No node/tailwind:
-  # assets aren't built (the DOM diff compares asset tags, not files —
-  # see scripts/compare's jruby branch).
   compare-jruby:
     needs: generate-fixture
     runs-on: ubuntu-latest
@@ -1791,16 +916,10 @@ jobs:
           name: real-blog-fixture
       - name: Extract fixture
         run: tar -xzf real-blog.tar.gz
-      # JRuby 10 requires Java 21+ (it refuses to boot on older JDKs).
-      # setup-ruby provisions JRuby but not the JDK, so pin Java first.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-      # JRuby provisioning only — no bundler-cache. The committed scaffold
-      # Gemfile is MRI-only (`gem "sqlite3"`), so it can't be bundled under
-      # JRuby; `scripts/compare jruby` resolves the JRuby bundle
-      # (jdbc-sqlite3) against the emitted tree's own Gemfile instead.
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: 'jruby-10.0'
@@ -1812,17 +931,7 @@ jobs:
       - name: scripts/compare jruby
         run: scripts/compare jruby
 
-  # compare-spinel: DOM-diff against a live AOT-compiled binary served
-  # over Tep::Server (FFI HTTP/1.1). The spinel-transpile Makefile
-  # target vendors the Tep transport (precompiles sphttp.o + sed-
-  # substitutes @TEP_SPHTTP_O@ in net.rb) before AOT-compile; the
-  # scaffold's `make build` then drives `spinel main.rb -o build/blog`.
-  # 7/7 paths match against Rails as of matz/spinel#1017 (PR #1018)
-  # + #1020 (commit 23d9a18). `continue-on-error` is still on because
-  # spinel master can churn faster than this job rebuilds against it;
-  # drop it once the upstream cadence settles.
   compare-spinel:
-    # Re-enabled 2026-06-17 (7/7 paths match Rails on matz/spinel master). Advisory.
     needs: [generate-fixture, build-spinel]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1862,43 +971,6 @@ jobs:
           node-version: '20'
       - name: scripts/compare spinel
         run: scripts/compare spinel
-
-  # -------------------------------------------------------------------
-  # smoke-<target>: the archive runs its own README. Each published
-  # <target>.tgz is the complete test artifact — the transpiled app,
-  # its model/controller test suite, and the Playwright e2e suite
-  # (e2e/, injected by project::ensure_e2e with a webServer config
-  # that boots the archive's own binary and seeds its own db/seed.sql).
-  # scripts/smoke extracts the tgz and executes the README's ```sh
-  # blocks verbatim — docs-as-contract: if the README is wrong, the
-  # job is red. (The go pilot caught `go build .` colliding with the
-  # app/ source dir, a missing-storage/ boot panic, and four more
-  # never-executed README instructions across targets.)
-  #
-  # Each smoke job subsumes the target's old toolchain-<t> build+test
-  # legs (README § Build/Test) and e2e-<t> (README § End-to-end). The
-  # toolchain harnesses remain as dev-loop tools:
-  # cargo test --test <t>_toolchain -- --ignored.
-  #
-  # § Test also has to prove it EXECUTED something: scripts/smoke parses
-  # the runner's own summary (or its JUnit XML, for gradle) and fails
-  # below a per-target floor — 21, the real-blog app suite. Exit status
-  # alone is not evidence; every runner here exits 0 having run nothing,
-  # which is how csharp's `dotnet test` stayed green for months over an
-  # archive with no test project (#34 §0). csharp is declared as a
-  # floor-0 KNOWN GAP and warns on every run until its test emit lands.
-  #
-  # Per-job content = toolchain setup only; no per-target build/seed/
-  # boot knowledge lives here (that's the point — it's all in the
-  # archive). The repo-side playwright install pre-warms the browser
-  # cache + system deps so the README's own `npx playwright install
-  # chromium` (same ^1.49 range) is a cache hit.
-  #
-  # ruby/jruby ride smoke too: their scaffold document ships as
-  # SPECIMEN.md and the generated quick-start takes README.md. Only
-  # spinel keeps the scaffold README top-level (specimen doc + matz's
-  # extraction surface; not in the smoke matrix).
-  # -------------------------------------------------------------------
 
   smoke:
     needs: build-site
@@ -1991,16 +1063,6 @@ jobs:
       - name: scripts/smoke ${{ matrix.target }}
         run: scripts/smoke --tgz browse/${{ matrix.target }}.tgz ${{ matrix.target }}
 
-  # spinel: the archive's README § Build AOT-compiles main.rb → build/blog
-  # with the spinel toolchain (build-spinel artifact); § Test runs the
-  # scaffold Makefile's `spinel-test` (each emitted test → a native binary);
-  # § End-to-end boots build/blog under Playwright. Unlike ruby it needs no
-  # MRI/bundler — static assets ship prebuilt in the archive (ensure_static_
-  # assets, like jruby) so Build is the bare native compile. Toolchain =
-  # spinel on PATH + a C compiler + libsqlite3-dev (the binary links
-  # -lsqlite3) + Node for Playwright. Advisory (continue-on-error) like every
-  # spinel job — it tracks matz/spinel master UNPINNED. needs build-spinel
-  # for the compiler and build-site for the published spinel.tgz.
   smoke-spinel:
     needs: [build-site, build-spinel]
     runs-on: ubuntu-latest
@@ -2034,45 +1096,9 @@ jobs:
       - name: scripts/smoke spinel
         run: scripts/smoke --tgz browse/spinel.tgz spinel
 
-  # -------------------------------------------------------------------
-  # build-campfire-archive: ONCE Campfire for the spinel target, packaged
-  # the way the blog archives are.
-  #
-  # Published at rubys.github.io/roundhouse/campfire/spinel.tgz — NOT
-  # under browse/, which names the source VIEWER and has no manifest for
-  # this archive to render. Linked from site/apps/campfire.html.
-  #
-  # What it buys TODAY is the question nobody has answered: this tree
-  # has only ever been built and driven on macOS arm64. This job is the
-  # first time it is compiled and browser-driven on Linux.
-  #
-  # Where the blog archives come out of `roundhouse --site`, this one is
-  # built by scripts/build-campfire-archive, for two reasons the script's
-  # header states: `--site` is one-fixture-many-targets, and its archive
-  # writer is text-only — campfire's hundred binary assets (mp3, png,
-  # webp, gif) cannot be represented as `(String, String)` at all. The
-  # script tars the directory `--target spinel -o` already populated.
-  #
-  # Ruby is here for `make assets` ONLY, which shells `bundle exec ruby`
-  # to locate four gem dirs. Baking the assets in is what lets a
-  # downloader need nothing but spinel, a C compiler and Node — and it
-  # is why the room page's ninety-five ES module pins resolve instead of
-  # 404ing behind a 200.
-  #
-  # It also builds campfire/docker.tgz — the same program after `spin
-  # pack`, with a Dockerfile — when the spinel toolchain is available.
-  # build-spinel is advisory (matz/spinel master, unpinned), so the
-  # download is tolerant and the script skips the Docker archive with a
-  # warning when `spin` is not on PATH: a red spinel build must not stop
-  # the source archive from publishing.
-  # -------------------------------------------------------------------
   build-campfire-archive:
     needs: [build-spinel]
     runs-on: ubuntu-latest
-    # 60, not 30: `spin pack` runs spinel's front-end over the whole
-    # campfire tree, and with the ruby-vips package in it the job took
-    # 26 of its 30 minutes on 2026-09-12 (run 34725916085). A publish
-    # that times out four minutes short is a flake waiting to happen.
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
@@ -2107,13 +1133,6 @@ jobs:
           name: campfire-archive
           path: _site/campfire/*.tgz
 
-  # smoke-campfire-docker: the Docker archive's README says "Docker and
-  # nothing else", so that is what this job has — no spinel, no C
-  # toolchain of its own. Extract, `docker build`, run, and ask the
-  # server for what a fresh install answers first: `/` redirects to
-  # sign-in, `/first_run` renders, and `/account/logo` -- a source-path
-  # read the sign-in page triggers -- is found. Advisory like every
-  # spinel job.
   smoke-campfire-docker:
     needs: [build-campfire-archive]
     runs-on: ubuntu-latest
@@ -2149,22 +1168,6 @@ jobs:
           docker rm -f campfire >/dev/null
           [ "$root" = 302 ] && [ "$first" = 200 ] && [ "$logo" = 200 ]
 
-  # smoke-campfire: the campfire archive runs its own README, exactly as
-  # smoke-spinel does for the blog — extract, execute every fenced ```sh
-  # block in order, skip `## Run` and `## Regenerate`.
-  #
-  # The difference from every other smoke is WHAT proves it: this archive
-  # has no `## Test` section (its emitted test/ sources ship, but several
-  # do not compile or do not pass yet — see the archive README), so the
-  # executed-count floor is asserted against `## End-to-end`. That is a
-  # generalization in scripts/smoke, not a campfire exception: the gate
-  # exists because every runner exits 0 having run nothing, and Playwright
-  # is as capable of that as `dotnet test` was.
-  #
-  # Advisory (continue-on-error) like every spinel job — it tracks
-  # matz/spinel master UNPINNED, so a red here can be upstream drift
-  # rather than our regression. Read it job-by-job; a green RUN does not
-  # mean this passed.
   smoke-campfire:
     needs: [build-campfire-archive, build-spinel]
     runs-on: ubuntu-latest
@@ -2185,8 +1188,6 @@ jobs:
           chmod +x spinel-dist/spinel spinel-dist/spin spinel-dist/spinel_rbs_extract
           echo "$PWD/spinel-dist" >> $GITHUB_PATH
       - name: Install libsqlite3-dev + libjemalloc-dev + libvips-dev
-        # libvips-dev: the emitted spin.toml names ruby-vips (campfire
-        # declares image variants), and the package links -lvips.
         run: |
           "$GITHUB_WORKSPACE/scripts/ci-apt-install" libsqlite3-dev libjemalloc-dev libvips-dev
       - uses: actions/setup-node@v5
@@ -2200,37 +1201,7 @@ jobs:
       - name: scripts/smoke campfire
         run: scripts/smoke --tgz campfire/spinel.tgz campfire
 
-  # -------------------------------------------------------------------
-  # Build the Pages site: per-target manifests (real-blog fixture) +
-  # static HTML/CSS/JS from site/. Per matz/spinel#314, the archives at
-  # rubys.github.io/roundhouse/browse/<target>.tgz are matz's primary
-  # extraction surface for spinel-side bug repros — they need to
-  # publish *current emit* even when per-target toolchain/compare jobs
-  # fail (broken emit is exactly what's interesting to investigate).
-  #
-  # So build-site only gates on the fixture being available. It does
-  # not gate on unit / toolchain-* / compare-* — a flaky elixir CI run
-  # or a known-broken target shouldn't stall the archive workflow, and
-  # the archive itself is available via the workflow-run artifact even
-  # when unit fails. Pages publication (the `deploy` job below) does
-  # gate on unit, so a broken library can't push to the live site.
-  #
-  # build-site runs on PRs too (no `if: main`). Building the archives is
-  # harmless off-main and catches archive-generation breakage on the PR;
-  # PUBLISHING is the boundary, and that lives entirely in `deploy`
-  # (gated `if: main`). It also uploads the `browse-archives` artifact so
-  # the e2e-<target> jobs can boot the exact built bytes without
-  # rebuilding the site.
-  # -------------------------------------------------------------------
   build-site:
-    # campfire-conformance is here for ORDERING ONLY — its summary.json is
-    # this job's input. The `if:` deliberately does not require it to have
-    # SUCCEEDED: that job is blocking (pinned input, so a red floor is a
-    # real regression and must fail the run), but the page it feeds is the
-    # thing that says WHAT regressed, and suppressing the page on the run
-    # where it is most useful would be exactly backwards. A missing
-    # artifact degrades to a skipped render and a warning, not a broken
-    # site build.
     needs: [generate-fixture, build-wasm, campfire-conformance, build-campfire-archive]
     if: ${{ !cancelled() && needs.generate-fixture.result == 'success' && needs.build-wasm.result == 'success' }}
     runs-on: ubuntu-latest
@@ -2244,31 +1215,10 @@ jobs:
           name: real-blog-fixture
       - name: Extract fixture
         run: tar -xzf real-blog.tar.gz
-      # The compiler wasm, built fresh from source by the parallel build-wasm
-      # job (no committed binary). Lands in _site/lib/ for /playground/+/studio/.
       - uses: actions/download-artifact@v8
         with:
           name: roundhouse-wasm
           path: wasm-artifact
-      # Compile the static asset graph once and inject it into every emit
-      # archive's static/assets/ (via ROUNDHOUSE_ASSETS_DIR) so the published
-      # archives are self-contained — no build step required by a downloader.
-      # The asset set is identical across targets (same Rails-derived HTML +
-      # same importmap pins), so one build from the fixture serves all.
-      #
-      # Two halves, both landing in build/assets/:
-      #   - tailwind.css  — compiled by the Tailwind v4 CLI (Node).
-      #   - the JS importmap graph — turbo.min.js / stimulus.min.js /
-      #     stimulus-loading.js (copied out of the turbo-rails / stimulus-rails
-      #     gem dirs) plus the fixture's own app/javascript (application.js +
-      #     controllers/*). These are the modules the emitted layout's
-      #     `javascript_importmap_tags` references at /assets/*; without them
-      #     the ES-module graph 404s and Turbo never boots (so turbo_comment +
-      #     action_cable can't pass). Mirrors the scaffold Makefile's `assets`
-      #     rule, which ruby/spinel/jruby run in-archive.
-      # collect_asset_files (src/project.rs) walks build/assets/ recursively
-      # and preserves subdirs, so controllers/*.js land at
-      # static/assets/controllers/*.js — matching the `controllers/*` pins.
       - name: Install Node
         uses: actions/setup-node@v5
         with:
@@ -2307,21 +1257,6 @@ jobs:
           ROUNDHOUSE_ASSETS_DIR: build/assets
         run: cargo run --release --bin roundhouse -- --site
 
-      # The campfire archive, built by the parallel build-campfire-archive
-      # job. It lands AFTER `--site` because build_site() removes and
-      # recreates the output directory, which would take _site/campfire
-      # with it.
-      #
-      # The bytes go live at rubys.github.io/roundhouse/campfire/spinel.tgz
-      # (source; needs a spinel checkout) and campfire/docker.tgz (the
-      # `spin pack` output with a Dockerfile; needs Docker and nothing
-      # else). Both are linked from site/apps/campfire.html.
-      #
-      # Tolerant of a missing artifact ON PURPOSE, and for the same reason
-      # this job does not require campfire-conformance to have SUCCEEDED:
-      # per matz/spinel#314 the published archives are an extraction
-      # surface for upstream bug repros, so a broken campfire emit must not
-      # stall publication of the eleven blog archives beside it.
       - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -2340,16 +1275,6 @@ jobs:
             echo "::warning::no campfire Docker archive this run (spinel toolchain missing?)"
           fi
 
-      # Live SharedWorker blog demo → _site/blog/. Emits real-blog under
-      # the worker profile, vite-builds it with ROUNDHOUSE_BASE set to the
-      # Pages mount path, and drops dist/ alongside the static site. The
-      # app runs entirely in the browser (SharedWorker + sqlite-wasm via
-      # the opfs-sahpool VFS) — no server, and crucially no COOP/COEP
-      # cross-origin-isolation headers, so it serves straight off Pages.
-      # Deep-link reloads are handled by site/404.html (already copied
-      # into _site by build-site) bouncing back to the shell's decoder.
-      # ROUNDHOUSE_BASE here must match the base hard-coded in
-      # site/404.html.
       - name: Build live SharedWorker blog demo (→ _site/blog)
         env:
           ROUNDHOUSE_BASE: /roundhouse/blog/
@@ -2363,18 +1288,6 @@ jobs:
           cp -R "$DEMO"/dist/. _site/blog/
           echo "blog demo files:"; find _site/blog -maxdepth 2 -type f | sort
 
-      # In-browser playground + studio demos → _site/{lib,playground,studio}/.
-      # Where the blog ships the *emitted app*, these ship the *compiler itself*
-      # as wasm. The two surfaces share ../lib/ (driver + editor + tree widget +
-      # bundler + the compiler wasm + the seed fixture), so the served tree must
-      # keep lib/ a sibling of the surface dirs (the pages import ../lib/).
-      # /playground/ = edit Ruby → emitted code, any target; /studio/ = edit
-      # Ruby → run the emitted TS blog live (rung D). fixture.json is regenerated
-      # from the just-built real-blog so it tracks create-blog. The compiler wasm
-      # is built fresh from source by the parallel build-wasm job and pulled in
-      # as an artifact (NOT committed) — see wasm/vendor/ruby-rbs-sys/README.md
-      # and the "Publishing to Pages" section of docs/archive/browser-demo-plan.md. Pure
-      # static files (no npm/vite, no COOP/COEP), so they serve straight off Pages.
       - name: Bundle the in-browser playground + studio demos (→ _site/lib, _site/playground, _site/studio)
         run: |
           set -euo pipefail
@@ -2397,10 +1310,6 @@ jobs:
           echo "playground files:"; find _site/playground -type f | sort
           echo "studio files:";     find _site/studio -type f | sort
 
-      # The /ide/ demo: Monaco over the analyzer wasm in a Web Worker,
-      # preloaded with Mastodon at $MASTODON_SHA (source-only bundle,
-      # LICENSE + commit embedded — AGPL source redistribution). Same
-      # bundle + cache key the browser-smoke-ide job verified.
       - name: Cache Mastodon source bundle
         id: mastodon-src-site
         uses: actions/cache@v4
@@ -2424,13 +1333,6 @@ jobs:
           cp wasm/ide/app-src.json _site/ide/
           echo "ide files:"; find _site/ide -type f | sort
 
-      # App-picker bundles + manifests. Both surfaces gained an app selector;
-      # each fetches an apps.json listing the shipped source bundles and swaps
-      # them in-place (analyze/transpile are stateless per call). Mastodon is
-      # /ide/-only — its strict-mode ingest gaps (alias, class<<self) hard-fail
-      # the /playground/'s full-transpile path, whereas /ide/'s analysis is
-      # gap-tolerant. Lobsters (ruby-bench, MIT) ships to both; the blog ships
-      # to /ide/ as a source bundle (the playground reuses lib/fixture.json).
       - name: Cache lobsters source bundle
         id: lobsters-src-site
         uses: actions/cache@v4
@@ -2497,11 +1399,6 @@ jobs:
           echo "lib app bundles:"; ls -1 _site/lib/*.json | sort
           echo "ide app bundles:"; ls -1 _site/ide/*.json | sort
 
-      # Bench results page — fetched from the Hetzner publishing endpoint
-      # (cron-driven, populates bench/results/latest on each run). The
-      # render step degrades gracefully: if Hetzner is unreachable, the
-      # `_site/bench/` directory simply isn't created and the landing
-      # page's link 404s until the next CI cycle picks up fresh data.
       - name: Fetch latest bench data
         id: fetch-bench
         env:
@@ -2523,15 +1420,6 @@ jobs:
         if: steps.fetch-bench.outputs.bench_data == 'present'
         run: scripts/bench-report _site/bench/summary.json _site/bench/index.html
 
-      # Lobsters bench results page — same Hetzner endpoint, /lobsters/ path
-      # (roundbench.showcase.party/lobsters/ → _site/bench/lobsters/). Fetched
-      # and rendered independently of the blog bench above: it renders
-      # whenever lobsters data is reachable even if the blog data isn't, and
-      # degrades the same way (no dir, link 404s until the next cycle).
-      # The nightly serves the LANE layout (matrix.json at the run root, one
-      # subdir per lane — what `bench-lobsters LANES…` writes); the flat
-      # summary.json fetch remains as the legacy fallback so a rollback on
-      # the bench box doesn't blank the page.
       - name: Fetch latest lobsters bench data
         id: fetch-lobsters-bench
         env:
@@ -2588,21 +1476,8 @@ jobs:
           fi
       - name: Render lobsters bench page
         if: steps.fetch-lobsters-bench.outputs.lobsters_bench_data == 'present'
-        # The report detects the layout from the directory contents.
         run: scripts/lobsters-report _site/bench/lobsters _site/bench/lobsters/index.html
 
-      # Lobsters conformance — upstream HEAD's own RSpec suite run against
-      # an emit of the same checkout (scripts/lobsters-specs on the bench
-      # box, published to roundbench.showcase.party/lobsters-specs/). The
-      # JSON is fetched and rendered HERE rather than fetching the page the
-      # box already rendered: the renderer lives in this repo and evolves
-      # with it, so a fix to the report reaches the site on the next CI run
-      # instead of waiting for the box's next cron cycle.
-      #
-      # Deliberately ungated on content. If the box publishes a run whose
-      # canary failed or whose checkout was dirty, the page renders WITH the
-      # alarm banner that says so — suppressing it would defeat the point of
-      # having one.
       - name: Fetch latest lobsters conformance data
         id: fetch-lobsters-specs
         env:
@@ -2621,12 +1496,6 @@ jobs:
         if: steps.fetch-lobsters-specs.outputs.specs_data == 'present'
         run: scripts/lobsters-spec-report _site/bench/lobsters-specs _site/bench/lobsters-specs/index.html
 
-      # Campfire bench results page — the Hetzner endpoint's /campfire/ path
-      # (roundbench.showcase.party/campfire/ → _site/bench/campfire/), same
-      # shape as the blog bench above and rendered by the same script.
-      # parity.txt comes along because the report renders a section from it:
-      # the per-lane tag tallies are what make the throughput numbers a
-      # comparison rather than two unrelated measurements.
       - name: Fetch latest campfire bench data
         id: fetch-campfire-bench
         env:
@@ -2658,16 +1527,6 @@ jobs:
         if: steps.fetch-campfire-bench.outputs.campfire_bench == 'present'
         run: scripts/bench-report _site/bench/campfire/summary.json _site/bench/campfire/index.html
 
-      # Campfire conformance — ONCE Campfire's own Minitest suite run
-      # against an emit of the pinned CAMPFIRE_SHA, by the
-      # campfire-conformance job in THIS run. Unlike its lobsters sibling
-      # the data is not fetched from a bench box: the input is pinned, so
-      # the suite runs in CI and the page published beside this commit
-      # describes this commit.
-      #
-      # `continue-on-error`, because the artifact is absent whenever that
-      # job died before writing it — which must degrade to "no page", not
-      # "no site".
       - name: Fetch campfire conformance data
         id: fetch-campfire-suite
         continue-on-error: true
@@ -2685,30 +1544,6 @@ jobs:
             rmdir _site/bench 2>/dev/null || true
           fi
 
-      # Campfire conformance, COMPILED — the same emitted source as the
-      # page above, with each test file built to its own native binary by
-      # spinel and run. Fetched from the bench box rather than produced
-      # here, and that split is the whole difference between the two:
-      #
-      #   * The interpreted lane runs IN CI because it is seconds of work
-      #     against a pinned app, so every movement belongs to the commit
-      #     the page is published beside.
-      #   * This one is 54 whole-program compiles — nineteen minutes on
-      #     the box — so it runs nightly at 04:00 and the page describes
-      #     WHATEVER roundhouse and spinel were that morning, not this
-      #     commit. Its summary records all four inputs (campfire pin,
-      #     roundhouse SHA, spinel version read from the BINARY) so a
-      #     movement can be attributed without this page having to.
-      #
-      # Rendered here rather than fetching the HTML the box already
-      # rendered, for the reason the lobsters conformance step gives: the
-      # renderer lives in this repo and a fix to it should reach the site
-      # on the next CI run rather than on the box's next cron cycle.
-      #
-      # Only summary.json is fetched because that is all the renderer
-      # reads. The tally, the per-test failures and the 54 per-file
-      # compile logs stay on the box, one link away under
-      # roundbench.showcase.party/campfire-suite/.
       - name: Fetch latest compiled campfire conformance data
         id: fetch-campfire-suite-spinel
         env:
@@ -2727,8 +1562,6 @@ jobs:
         if: steps.fetch-campfire-suite-spinel.outputs.compiled_data == 'present'
         run: scripts/campfire-suite-report _site/bench/campfire-suite-spinel _site/bench/campfire-suite-spinel/index.html
 
-      # The per-target archives, for the e2e-<target> jobs to download and
-      # boot — the exact bytes published to rubys.github.io/roundhouse.
       - name: Upload browse archives
         uses: actions/upload-artifact@v7
         with:
